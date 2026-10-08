@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Python Workshop — Student Lecture Notes</title>
+<style>
+body{font:16px/1.7 system-ui,sans-serif;color:#25334a;background:#eef1f5;margin:0}main{max-width:850px;margin:32px auto;padding:48px 60px;background:white}h1{font-size:38px;line-height:1.2;letter-spacing:-1px}h2{margin-top:42px;border-top:1px solid #dce2eb;padding-top:24px;font-size:24px}h3{font-size:18px}p,li{max-width:74ch}a{color:#304eb5}pre{background:#f2f5fa;padding:18px;overflow:auto;border-left:3px solid #536bbf;font:14px/1.65 Consolas,monospace}code{font-family:Consolas,monospace}table{border-collapse:collapse;width:100%;font-size:14px}td,th{text-align:left;vertical-align:top;padding:10px;border:1px solid #dce2eb}th{background:#f2f5fa}.tag{font-size:12px;letter-spacing:2px;color:#566c97}.callout{padding:16px 22px;background:#edf3fb}.task{border-left:3px solid #23927a;padding-left:20px}button{padding:10px 16px;cursor:pointer}footer{margin-top:48px;font-size:13px;color:#647086}@media(max-width:700px){main{margin:0;padding:24px}h1{font-size:30px}}@media print{body{background:white;font-size:11pt}main{margin:0;padding:0;max-width:none}.no-print{display:none}h2,h3{break-after:avoid}pre,table,.task{break-inside:avoid}a{color:inherit}pre{white-space:pre-wrap} @page{margin:18mm}}
+</style></head><body><main>
+<div class="tag">PYZERO STUDIO · STUDENT LECTURE NOTES</div>
+<h1>Think in Python.<br>Use shortcuts to write it.</h1>
+<p>A practical workshop for beginners, ages 12–15. Suggested teaching time: two 45–50 minute lessons, with extension tasks for a third lesson.</p>
+<p class="no-print"><button onclick="window.print()">Print / Save as PDF</button> &nbsp; <a href="./">Open the Python workspace</a></p>
+<nav class="no-print"><a href="#structure">Program structure</a> · <a href="#logic">Logic</a> · <a href="#workflow">Debugging workflow</a> · <a href="#practice">Practice tasks</a> · <a href="#teacher">Teacher guide</a></nav>
+
+<h2>1. What you will learn</h2>
+<p>By the end of this workshop, you should be able to:</p>
+<ul><li>Read a short Python program and predict a change before running it.</li><li>Choose where setup, drawing and repeated logic belong.</li><li>Use variables, expressions, conditions and indentation to control behaviour.</li><li>Change and combine statements to create your own behaviour.</li><li>Observe values, read an error and make a reasoned correction.</li></ul>
+<div class="callout"><strong>Your decisions matter.</strong> A shortcut supplies text such as <code>if …:</code>. You still decide the condition, the values, the body and where it belongs. You can type, delete or rewrite any line.</div>
+
+<h2>2. Using the workspace</h2>
+<ol><li>Click a position in <strong>game.py</strong>.</li><li>Choose a syntax shortcut. Edit its preview if useful.</li><li>Click <strong>Insert at cursor</strong>. The inserted text is selected: type to replace it, or use an arrow key to keep it and move the cursor.</li><li>Check names and indentation. A shortcut does not automatically create missing variables or actors.</li><li>Click <strong>Run Python</strong>. Observe the larger preview, variables and output.</li><li>Use <strong>Pause</strong> and <strong>Step update</strong> to advance one update at a time. Click the game canvas when you want keyboard control.</li><li>Use <strong>Stop &amp; edit</strong> to return to your source. Run again to start from setup.</li></ol>
+<p>Enter automatically indents Python blocks. Tab moves focus between controls; use four spaces when manually indenting. Ctrl+Z (Command+Z on Mac) undoes edits, including snippet insertion and loading Starter. The toolbox groups syntax into Setup, Draw, Logic, Structure and Debug. Its editable preview stays beside your program in the desktop layout. Both editors use matching colours for keywords, names, functions, strings, numbers and comments. Your latest source is saved in this browser when storage is available; download a copy before leaving a shared computer.</p>
+
+<h2 id="structure">3. Three parts of a program</h2>
+<pre>WIDTH = 800
+HEIGHT = 600
+player = Actor("spaceship", (150, 300))
+
+def draw():
+    screen.clear()
+    player.draw()
+
+def update():
+    if keyboard.right:
+        player.x += 5</pre>
+<table><thead><tr><th>Part</th><th>When it runs</th><th>Your decision</th></tr></thead><tbody>
+<tr><td>Setup: statements outside functions</td><td>Once when the program starts</td><td>What objects and initial values do I need?</td></tr>
+<tr><td><code>draw()</code></td><td>When the screen is redrawn</td><td>What should be visible?</td></tr>
+<tr><td><code>update()</code></td><td>Repeatedly during the game</td><td>What should be checked or changed each time?</td></tr></tbody></table>
+<p><code>def</code> defines a function. Its indented body runs when the function is called. Pygame Zero calls <code>draw()</code> and <code>update()</code> for you. You must call other functions you define when you want their bodies to run.</p>
+<p><strong>Predict:</strong> What happens if <code>player.x = 150</code> is placed at the start of <code>update()</code>? Why might the player appear unable to travel?</p>
+
+<h2>4. Coordinates, variables and expressions</h2>
+<p>The top-left of the screen is <code>(0, 0)</code>. Increasing <code>x</code> moves right. Increasing <code>y</code> moves down. In our examples, an actor's position is its centre.</p>
+<pre>speed = 5              # Store a value
+player.x = 150         # Assign a new position
+player.x += speed      # Read x, add speed, store the result
+player.y -= 3          # Move upwards</pre>
+<p>A variable has a name and a current value. An expression computes a value: <code>speed * 2</code>, <code>WIDTH - 30</code> or <code>score + 1</code>. <code>player.x</code> is an attribute of the actor named <code>player</code>.</p>
+<p><strong>Trace by hand:</strong> Starting at x = 150, what is x after three updates with Right held and speed = 5? Write all three intermediate values before running.</p>
+<p><code>player.x += 5</code> inside <code>update()</code> means five pixels per update while the condition is true. It does not mean five pixels per physical key press. For a later extension, <code>def update(dt):</code> receives elapsed seconds; <code>player.x += 120 * dt</code> represents a speed of 120 pixels per second.</p>
+
+<h2 id="logic">5. Conditions and indentation</h2>
+<pre>if keyboard.right and player.x &lt; WIDTH - 30:
+    player.x += 5</pre>
+<p>The condition evaluates to <code>True</code> or <code>False</code>. The body runs only when it is true. The colon starts the block; indentation shows which statements belong to it.</p>
+<table><tr><th>Operator</th><th>Meaning</th></tr><tr><td><code>=</code></td><td>Assignment: store a value</td></tr><tr><td><code>==</code>, <code>!=</code></td><td>Equal to; not equal to</td></tr><tr><td><code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></td><td>Compare values</td></tr><tr><td><code>and</code>, <code>or</code>, <code>not</code></td><td>Combine or reverse Boolean conditions</td></tr></table>
+<pre>if score &gt;= 10:
+    message = "Target reached"
+else:
+    message = "Keep going"</pre>
+<p>An <code>if / else</code> selects one branch. Two separate <code>if</code> statements are two independent checks. If both are true, both bodies run.</p>
+<p><strong>Discuss:</strong> If Left and Right are both held, what will two separate movement conditions do? Would using <code>elif</code> change the result?</p>
+
+<h2>6. State, repetition and order</h2>
+<p><em>State</em> is the information your program currently remembers: position, score, speed, or whether something has already happened. Your program changes that state over time.</p>
+<pre>score = 0
+
+def update():
+    global score
+    if player.colliderect(coin):
+        score += 1</pre>
+<p>This fragment requires <code>player</code> and <code>coin</code> to have been created in setup. <code>global score</code> allows the function to reassign the module-level variable. Changing <code>player.x</code> changes an object attribute and does not require <code>global player</code>.</p>
+<p><strong>Debugging question:</strong> Why does the score rise repeatedly while the actors overlap? The condition is checked on each update. How could you make the event count once?</p>
+<p>Possible designs include moving the coin elsewhere, remembering that it has been collected, or detecting the transition from “not touching” to “touching”. Choose the design that fits your game. Each requires different state or actions.</p>
+<pre>for i in range(3):
+    print(i)</pre>
+<p>This prints 0, 1 and 2 in one execution of the loop. If placed inside <code>update()</code>, all three iterations happen on each update. A Python loop is not a delay between animation frames.</p>
+<p>Statements execute in order. Assigning <code>player.x = 100</code> before adding 5 gives a different result from assigning it after adding 5. Reordering code is a programming decision.</p>
+
+<h2 id="workflow">7. A workflow you can repeat</h2>
+<ol><li><strong>Describe:</strong> Write one sentence about the behaviour you want.</li><li><strong>Predict:</strong> State what one variable should do.</li><li><strong>Edit:</strong> Make a small code change. Use a shortcut for repetitive syntax.</li><li><strong>Run:</strong> Try the condition that should trigger the behaviour.</li><li><strong>Inspect:</strong> Compare the output with your prediction. Pause, step, or use <code>print()</code>.</li><li><strong>Fix:</strong> Explain a likely cause, change one thing, and run again.</li></ol>
+<table><tr><th>Problem</th><th>What to inspect</th></tr><tr><td><code>SyntaxError</code></td><td>The reported line and nearby punctuation: colon, brackets, quotes</td></tr><tr><td><code>IndentationError</code></td><td>Which statements should be inside the function or condition?</td></tr><tr><td><code>NameError</code></td><td>Spelling, capitalisation and whether the name was defined before use</td></tr><tr><td>No error, wrong result</td><td>Condition, sign, execution order, repeated updates and initial values</td></tr></table>
+<p>The error output may include adapter internals. Look for <code>game.py</code>, its line number and the final error message. Stop terminates the browser worker, including an accidental endless loop. Step update advances an entire update and redraw; it is not a line-by-line debugger.</p>
+
+<h2 id="practice">8. Practice: make decisions in code</h2>
+<div class="task"><h3>A. Change and explain</h3><p>Load Starter. Predict the effect of changing 5 to 2, then to −5. Run each version. Explain the difference between the amount of movement and its direction.</p><p><strong>Evidence:</strong> three predictions and one sentence comparing them with observations.</p></div>
+<div class="task"><h3>B. Add a behaviour</h3><p>Add Left movement yourself. Then choose a second key and give it a different action. Insert a shortcut if helpful, but edit the names and values.</p><p><strong>Evidence:</strong> identify the condition and body of each rule; explain where you placed them.</p></div>
+<div class="task"><h3>C. Keep an actor on screen</h3><p>Add a boundary condition. Try starting near the edge and moving by a large amount. Does checking the position before moving guarantee the next position stays inside? Improve your rule using the proposed next position or a clamp such as <code>min()</code>.</p><p><strong>Evidence:</strong> one failing example and your revised code.</p></div>
+<div class="task"><h3>D. Design your own rule</h3><p>Choose a behaviour: score after crossing a line, teleport at an edge, move automatically until a condition changes, or collect an object once. Write the rule in English, list the state you need, then implement it.</p><p><strong>Evidence:</strong> explain your condition, state change and why it happens at the right time. Collision is optional.</p></div>
+<div class="task"><h3>E. Find a logical bug</h3><p>Use the repeated-score fragment in section 6. Create the two actors and draw them. Make them overlap. Observe score while paused and stepping. Implement one method to count the event once.</p><p><strong>Evidence:</strong> explain why your first version repeated and how your revision changes the state.</p></div>
+
+<h2>9. A small worked solution</h2>
+<p>Read this after attempting task B. This complete program supports both directions and keeps the actor's centre within a margin. The choices are visible in the code.</p>
+<pre>WIDTH = 800
+HEIGHT = 600
+speed = 5
+player = Actor("spaceship", (150, 300))
+
+def draw():
+    screen.clear()
+    player.draw()
+
+def update():
+    if keyboard.right:
+        player.x = min(WIDTH - 30, player.x + speed)
+    if keyboard.left:
+        player.x = max(30, player.x - speed)</pre>
+<p><strong>Extend:</strong> Replace the fixed distance with time-based movement. Explain your units: pixels per update or pixels per second.</p>
+
+<h2>10. What this preview supports</h2>
+<p>This prototype executes Python using Pyodide. A small display adapter supplies selected Pygame Zero names; it does not run the complete Pygame Zero package. Regular Python conditions, loops, functions, arithmetic and standard-library <code>random</code> work.</p>
+<ul><li><code>Actor(image, (x, y))</code>: built-in images are <code>spaceship</code>, <code>alien</code>, <code>coin</code> and <code>ball</code>. Supported attributes include x, y, pos, angle and edges. Actors use 52 × 52 bounding boxes in this preview.</li><li><code>actor.draw()</code>, rectangular <code>colliderect()</code>, <code>keyboard.right</code> and other keyboard names.</li><li><code>screen.clear()</code>, <code>screen.fill("navy")</code>, and <code>screen.draw.text(text, (x, y), color="white", fontsize=24)</code>.</li><li><code>draw()</code>, <code>update()</code> or <code>update(dt)</code>, plus <code>print()</code> output.</li></ul>
+<p>The adapter targets 60 updates per second and supplies a fixed dt of 1/60. Browser scheduling may run slower; it is not a timing benchmark. Mouse event hooks, sound, clock scheduling, animation helpers, custom images and the complete screen drawing API are not implemented. Unsupported features should be run in desktop Pygame Zero. A downloaded .py file contains your code; desktop use also needs the matching image files in an <code>images/</code> folder and Pygame Zero installed. The browser's built-in illustrations are not bundled in that download.</p>
+<p>First run downloads the Python runtime from a CDN and needs internet access. Your source is passed to the browser worker for execution. Each Run starts a fresh program; Stop preserves your source and the last displayed state.</p>
+
+<h2 id="teacher">11. Teacher guide and checkpoints</h2>
+<table><tr><th>Lesson</th><th>Suggested sequence</th></tr><tr><td>1 · Structure and decisions</td><td>5 min: prediction; 10 min: setup/draw/update; 10 min: edit and trace values; 15 min: tasks A–B; 5 min: explain a condition and body.</td></tr><tr><td>2 · State and debugging</td><td>5 min: recap; 10 min: repetition and state; 15 min: tasks C or E; 10 min: personal rule D; 5 min: explain a bug and fix.</td></tr></table>
+<p>Assess explanations and code changes. Ask students to point to the statement that stores a value, the condition that permits an action, and the indentation that defines its body. A finished game alone is insufficient evidence of understanding.</p>
+<p>Useful prompts: “What happens on the next update?” “Which value changed?” “What would happen if those two lines swapped?” “Which part of this snippet did you decide?”</p>
+<details><summary>Teacher answer cues</summary><ul><li>Three rightward updates from 150 at speed 5 produce 155, 160 and 165.</li><li>Resetting x on every update prevents accumulated movement.</li><li>Opposing independent movements can cancel; elif gives priority to the first true branch.</li><li>A coin that remains touching can score on every update. Respawning or recording collection changes subsequent behaviour.</li><li>A pre-movement boundary check can overshoot. Check the proposed value or clamp the final position.</li></ul></details>
+<h3>Exit ticket</h3><ol><li>Explain one difference between draw and update.</li><li>Show a condition and explain when it is false.</li><li>Describe one prediction, observation and correction from your own work.</li><li>Identify one decision you made that a snippet did not make for you.</li></ol>
+<footer><strong>References</strong><p><a href="https://pygame-zero.readthedocs.io/en/stable/hooks.html">Pygame Zero: event hooks</a> · <a href="https://pygame-zero.readthedocs.io/en/stable/builtins.html">Pygame Zero: built-in objects</a> · <a href="https://docs.python.org/3/tutorial/controlflow.html">Python: control flow</a> · <a href="https://pyodide.org/en/stable/usage/index.html">Pyodide: using Python in the browser</a></p><p>Prepared for the code-centred PyZero Studio prototype. Preview limitations are stated above.</p></footer>
+</main></body></html>

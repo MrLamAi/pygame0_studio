@@ -1,0 +1,433 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { GameActor, GameProject, ControlBinding, ControlSlot, KeyboardKey } from './types/game';
+import { createBindings } from './types/game';
+import { createEmptyProject, createSampleProject, loadSavedProject } from './lib/sampleProject';
+import { generatePython } from './lib/generatePython';
+import type { CodeSection } from './lib/generatePython';
+import type { NewActorValues } from './components/AddActorDialog';
+import { AddActorDialog } from './components/AddActorDialog';
+import { BehaviorBuilder } from './components/BehaviorBuilder';
+import { Icon } from './components/Icon';
+import { ObjectPanel } from './components/ObjectPanel';
+import { PropertyInspector } from './components/PropertyInspector';
+import { PythonPanel } from './components/PythonPanel';
+import { SceneStage } from './components/SceneStage';
+
+function createId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `actor-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function uniqueActorName(name: string, actors: GameActor[]): string {
+  const taken = new Set(actors.map((actor) => actor.name.toLowerCase()));
+  if (!taken.has(name.toLowerCase())) return name;
+  let index = 2;
+  while (taken.has(`${name} ${index}`.toLowerCase())) index += 1;
+  return `${name} ${index}`;
+}
+
+function keyboardName(key: string): KeyboardKey | null {
+  const arrows: Record<string, KeyboardKey> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
+  if (arrows[key]) return arrows[key];
+  const lower = key.toLowerCase();
+  return ['left', 'right', 'up', 'down', 'w', 'a', 's', 'd'].includes(lower) ? lower as KeyboardKey : null;
+}
+
+type CodeFocusRequest =
+  | { type: 'actor'; actorId: string }
+  | { type: 'actor-speed'; actorId: string }
+  | { type: 'actor-angle'; actorId: string }
+  | { type: 'actor-visibility'; actorId: string }
+  | { type: 'control'; actorId: string; slot: ControlSlot; part: 'condition' | 'action' }
+  | { type: 'collision'; part: 'condition' | 'score' | 'respawn' }
+  | { type: 'section'; section: CodeSection };
+
+export default function App() {
+  const [project, setProject] = useState<GameProject>(() => loadSavedProject() ?? createSampleProject());
+  const projectRef = useRef(project);
+  const [selectedActorId, setSelectedActorId] = useState<string | null>(() => project.actors[0]?.id ?? null);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [runtimeScore, setRuntimeScore] = useState(0);
+  const [runtimeActors, setRuntimeActors] = useState<GameActor[]>([]);
+  const runtimeActorsRef = useRef(runtimeActors);
+  const [highlightLines, setHighlightLines] = useState<number[]>(() => {
+    const firstActorId = project.actors[0]?.id;
+    const line = firstActorId ? generatePython(project).lineMap.actorDeclarations[firstActorId] : 1;
+    return [line];
+  });
+  const [activeCodeSection, setActiveCodeSection] = useState<CodeSection>('setup');
+  const [pendingHighlight, setPendingHighlight] = useState<CodeFocusRequest | null>(null);
+  const playOriginRef = useRef<GameProject | null>(null);
+
+  const generated = useMemo(() => generatePython(project), [project]);
+  const selectedActor = project.actors.find((actor) => actor.id === selectedActorId) ?? null;
+
+  const replaceProject = useCallback((update: (current: GameProject) => GameProject) => {
+    const next = update(projectRef.current);
+    projectRef.current = next;
+    setProject(next);
+  }, []);
+
+  useEffect(() => {
+    projectRef.current = project;
+    try {
+      localStorage.setItem('pygame-zero-visual-studio:project:v1', JSON.stringify(project));
+    } catch {
+      // The editor remains usable if browser storage is unavailable.
+    }
+  }, [project]);
+
+  useEffect(() => {
+    if (!pendingHighlight) return;
+    let lines: number[] = [];
+    let section: CodeSection = 'update';
+    if (pendingHighlight.type === 'actor') {
+      const line = generated.lineMap.actorDeclarations[pendingHighlight.actorId];
+      if (line) lines = [line];
+      section = 'setup';
+    }
+    if (pendingHighlight.type === 'actor-speed') {
+      lines = Object.entries(generated.lineMap.controlActions)
+        .filter(([key]) => key.startsWith(`${pendingHighlight.actorId}:`))
+        .map(([, line]) => line);
+      section = 'update';
+    }
+    if (pendingHighlight.type === 'actor-angle') {
+      const line = generated.lineMap.actorAngles[pendingHighlight.actorId] ?? generated.lineMap.actorDeclarations[pendingHighlight.actorId];
+      if (line) lines = [line];
+      section = 'setup';
+    }
+    if (pendingHighlight.type === 'actor-visibility') {
+      const line = generated.lineMap.actorDraw[pendingHighlight.actorId];
+      if (line) lines = [line];
+      section = 'draw';
+    }
+    if (pendingHighlight.type === 'control') {
+      const key = `${pendingHighlight.actorId}:${pendingHighlight.slot}`;
+      const line = pendingHighlight.part === 'condition'
+        ? generated.lineMap.controlConditions[key]
+        : generated.lineMap.controlActions[key];
+      if (line) lines = [line];
+      section = 'update';
+    }
+    if (pendingHighlight.type === 'collision') {
+      section = 'update';
+      if (pendingHighlight.part === 'score') {
+        if (generated.lineMap.collisionScore) lines = [generated.lineMap.collisionScore];
+        else if (generated.lineMap.score) {
+          lines = [generated.lineMap.score];
+          section = 'setup';
+        }
+      } else if (pendingHighlight.part === 'respawn') {
+        lines = generated.lineMap.collisionRespawn ?? [];
+      } else if (generated.lineMap.collisionCondition) {
+        lines = [generated.lineMap.collisionCondition];
+      }
+    }
+    if (pendingHighlight.type === 'section') {
+      const line = generated.lineMap.sections[pendingHighlight.section];
+      if (line) lines = [line];
+      section = pendingHighlight.section;
+    }
+    if (!lines.length) {
+      const sectionLine = generated.lineMap.sections[section];
+      if (sectionLine) lines = [sectionLine];
+    }
+    if (lines.length) setHighlightLines(lines);
+    setActiveCodeSection(section);
+    setPendingHighlight(null);
+  }, [generated, pendingHighlight]);
+
+  useEffect(() => {
+    if (!playing) return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.target instanceof HTMLElement && event.target.closest('input, select, textarea, [contenteditable="true"]')) return;
+      const key = keyboardName(event.key);
+      if (!key) return;
+
+      const current = projectRef.current;
+      const controls = current.controls.filter((binding) => binding.enabled && binding.key === key);
+      if (!controls.length) return;
+      event.preventDefault();
+
+      let nextActors = runtimeActorsRef.current.map((actor) => {
+          const bindings = controls.filter((binding) => binding.actorId === actor.id);
+          if (!bindings.length) return actor;
+          let x = actor.x;
+          let y = actor.y;
+          for (const binding of bindings) {
+            const delta = binding.direction * actor.speed;
+            if (binding.axis === 'x') x += delta;
+            else y += delta;
+          }
+          return { ...actor, x: Math.max(0, Math.min(current.width, x)), y: Math.max(0, Math.min(current.height, y)) };
+        });
+
+      const rule = current.collision;
+      if (rule.enabled && rule.actorA !== rule.actorB && rule.actorA && rule.actorB) {
+        const first = nextActors.find((actor) => actor.id === rule.actorA);
+        const second = nextActors.find((actor) => actor.id === rule.actorB);
+        if (first && second && Math.abs(first.x - second.x) < 46 && Math.abs(first.y - second.y) < 46) {
+          if (current.showScore) setRuntimeScore((score) => score + Math.max(1, rule.scoreAmount));
+          if (rule.respawnSecond) {
+            const repositioned = {
+              ...second,
+              x: Math.round(50 + Math.random() * Math.max(0, current.width - 100)),
+              y: Math.round(50 + Math.random() * Math.max(0, current.height - 100)),
+            };
+            nextActors = nextActors.map((actor) => actor.id === second.id ? repositioned : actor);
+          }
+        }
+      }
+
+      runtimeActorsRef.current = nextActors;
+      setRuntimeActors(nextActors);
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [playing]);
+
+  function selectActor(id: string) {
+    setSelectedActorId(id);
+    setPendingHighlight({ type: 'actor', actorId: id });
+  }
+
+  function updateActor(id: string, patch: Partial<GameActor>) {
+    if (patch.speed !== undefined) setPendingHighlight({ type: 'actor-speed', actorId: id });
+    else if (patch.visible !== undefined) setPendingHighlight({ type: 'actor-visibility', actorId: id });
+    else if (patch.angle !== undefined) setPendingHighlight({ type: 'actor-angle', actorId: id });
+    else if (patch.name !== undefined || patch.image !== undefined || patch.x !== undefined || patch.y !== undefined) setPendingHighlight({ type: 'actor', actorId: id });
+    replaceProject((current) => ({
+      ...current,
+      actors: current.actors.map((actor) => actor.id === id ? {
+        ...actor,
+        ...patch,
+        x: patch.x === undefined ? actor.x : Math.max(0, Math.min(current.width, Math.round(patch.x))),
+        y: patch.y === undefined ? actor.y : Math.max(0, Math.min(current.height, Math.round(patch.y))),
+        speed: patch.speed === undefined ? actor.speed : Math.max(1, Math.min(30, Math.round(patch.speed))),
+        angle: patch.angle === undefined ? actor.angle : Math.max(-360, Math.min(360, Math.round(patch.angle))),
+      } : actor),
+    }));
+  }
+
+  function addActor(values: NewActorValues) {
+    const current = projectRef.current;
+    const id = createId();
+    const actor: GameActor = {
+      id,
+      name: uniqueActorName(values.name, current.actors),
+      image: values.image,
+      x: values.x,
+      y: values.y,
+      speed: 5,
+      angle: 0,
+      visible: true,
+    };
+    replaceProject((state) => {
+      const actors = [...state.actors, actor];
+      let collision = state.collision;
+      if (actors.length === 2) collision = { ...collision, actorA: actors[0].id, actorB: actors[1].id };
+      return { ...state, actors, controls: [...state.controls, ...createBindings(id)], collision };
+    });
+    setSelectedActorId(id);
+    setShowAddDialog(false);
+    setPendingHighlight({ type: 'actor', actorId: id });
+  }
+
+  function duplicateSelectedActor() {
+    if (!selectedActor) return;
+    const current = projectRef.current;
+    const actor: GameActor = {
+      ...selectedActor,
+      id: createId(),
+      name: uniqueActorName(selectedActor.name, current.actors),
+      x: Math.min(current.width, selectedActor.x + 32),
+      y: Math.min(current.height, selectedActor.y + 32),
+    };
+    replaceProject((state) => ({
+      ...state,
+      actors: [...state.actors, actor],
+      controls: [...state.controls, ...state.controls.filter((binding) => binding.actorId === selectedActor.id).map((binding) => ({ ...binding, actorId: actor.id }))],
+    }));
+    setSelectedActorId(actor.id);
+    setPendingHighlight({ type: 'actor', actorId: actor.id });
+  }
+
+  function deleteSelectedActor() {
+    if (!selectedActor) return;
+    const current = projectRef.current;
+    const remaining = current.actors.filter((actor) => actor.id !== selectedActor.id);
+    const nextSelection = remaining[0]?.id ?? null;
+    replaceProject((state) => {
+      const collisionActorDeleted = state.collision.actorA === selectedActor.id || state.collision.actorB === selectedActor.id;
+      const nextCollision = collisionActorDeleted
+        ? { ...state.collision, enabled: false, actorA: remaining[0]?.id ?? '', actorB: remaining[1]?.id ?? '' }
+        : state.collision;
+      return { ...state, actors: remaining, controls: state.controls.filter((binding) => binding.actorId !== selectedActor.id), collision: nextCollision };
+    });
+    setSelectedActorId(nextSelection);
+    if (nextSelection) setPendingHighlight({ type: 'actor', actorId: nextSelection });
+  }
+
+  function changeControl(binding: ControlBinding) {
+    replaceProject((current) => {
+      const exists = current.controls.some((item) => item.actorId === binding.actorId && item.slot === binding.slot);
+      return {
+        ...current,
+        controls: exists
+          ? current.controls.map((item) => item.actorId === binding.actorId && item.slot === binding.slot ? binding : item)
+          : [...current.controls, binding],
+      };
+    });
+  }
+
+  function changeCollision(patch: Partial<GameProject['collision']>) {
+    replaceProject((current) => {
+      const collision = { ...current.collision, ...patch };
+      if (current.actors.length > 1 && collision.actorA === collision.actorB) {
+        const otherActor = current.actors.find((actor) => actor.id !== (patch.actorA !== undefined ? collision.actorA : collision.actorB));
+        if (patch.actorA !== undefined) collision.actorB = otherActor?.id ?? '';
+        else collision.actorA = otherActor?.id ?? '';
+      }
+      return { ...current, collision };
+    });
+    const part = patch.scoreAmount !== undefined ? 'score' : patch.respawnSecond !== undefined ? 'respawn' : 'condition';
+    setPendingHighlight({ type: 'collision', part });
+  }
+
+  function changeScoreVisibility(value: boolean) {
+    replaceProject((current) => ({ ...current, showScore: value }));
+    setPendingHighlight({ type: 'collision', part: value ? 'score' : 'condition' });
+  }
+
+  function loadSample() {
+    const sample = createSampleProject();
+    replaceProject(() => sample);
+    setSelectedActorId(sample.actors[0].id);
+    setPlaying(false);
+    runtimeActorsRef.current = [];
+    setRuntimeActors([]);
+    playOriginRef.current = null;
+    setRuntimeScore(0);
+    setHighlightLines([generatePython(sample).lineMap.actorDeclarations[sample.actors[0].id] ?? 1]);
+    setActiveCodeSection('setup');
+  }
+
+  function createNewProject() {
+    const empty = createEmptyProject();
+    replaceProject(() => empty);
+    setSelectedActorId(null);
+    setPlaying(false);
+    runtimeActorsRef.current = [];
+    setRuntimeActors([]);
+    playOriginRef.current = null;
+    setRuntimeScore(0);
+    setHighlightLines([1]);
+    setActiveCodeSection('setup');
+  }
+
+  function startPreview() {
+    playOriginRef.current = structuredClone(projectRef.current);
+    const actors = structuredClone(projectRef.current.actors);
+    runtimeActorsRef.current = actors;
+    setRuntimeActors(actors);
+    setRuntimeScore(0);
+    setPlaying(true);
+    setPendingHighlight({ type: 'section', section: 'update' });
+  }
+
+  function restartPreview() {
+    if (playOriginRef.current) {
+      const actors = structuredClone(playOriginRef.current.actors);
+      runtimeActorsRef.current = actors;
+      setRuntimeActors(actors);
+    }
+    setRuntimeScore(0);
+  }
+
+  function stopPreview() {
+    setPlaying(false);
+    playOriginRef.current = null;
+    runtimeActorsRef.current = [];
+    setRuntimeActors([]);
+    setRuntimeScore(0);
+  }
+
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <div className="brand-lockup"><span className="brand-mark"><Icon name="code" size={20} /></span><span className="brand-name">Pygame Zero <strong>Studio</strong><small>VISUAL PYTHON WORKSPACE</small></span></div>
+        <div className="project-title-block"><span>PROJECT</span><strong>{project.name}</strong><span className="save-state"><span className="live-dot" /> Saved</span></div>
+        <div className="workflow-steps" aria-label="Workflow: edit, run, inspect, fix">
+          <span className={!playing ? 'workflow-step-current' : ''}><b>1</b> Edit</span>
+          <span className="workflow-arrow">›</span>
+          <span className={playing ? 'workflow-step-current' : ''}><b>2</b> Run</span>
+          <span className={playing ? 'workflow-step-current' : ''}><b>3</b> Inspect</span>
+          <span className="workflow-arrow">›</span>
+          <span>Fix</span>
+        </div>
+        <div className="topbar-divider" />
+        <div className="topbar-actions">
+          <button className="topbar-button" type="button" onClick={createNewProject} disabled={playing} title="Start a new game"><Icon name="plus" size={16} /><span>New</span></button>
+          <button className="topbar-button sample-button" type="button" onClick={loadSample} title="Load the Catch the Coin example"><Icon name="sparkle" size={16} /><span>Sample game</span></button>
+          <span className="action-divider" />
+          {playing ? (
+            <>
+              <button className="run-button stop-button" type="button" onClick={stopPreview}><Icon name="pause" size={15} /> Stop</button>
+              <button className="icon-button restart-button" type="button" onClick={restartPreview} aria-label="Restart preview" title="Restart preview"><Icon name="refresh" size={17} /></button>
+            </>
+          ) : (
+            <button className="run-button" type="button" onClick={startPreview}><Icon name="play" size={15} /> Run</button>
+          )}
+        </div>
+      </header>
+
+      <main className="workspace-grid">
+        <ObjectPanel actors={project.actors} selectedActorId={selectedActorId} disabled={playing} onSelect={selectActor} onAdd={() => setShowAddDialog(true)} />
+
+        <SceneStage
+          width={project.width}
+          height={project.height}
+          actors={playing ? runtimeActors : project.actors}
+          selectedActorId={selectedActorId}
+          playing={playing}
+          showScore={project.showScore}
+          score={runtimeScore}
+          onSelect={selectActor}
+          onMove={(id, x, y) => updateActor(id, { x, y })}
+        >
+          <PropertyInspector actor={selectedActor} disabled={playing} onChange={(patch) => selectedActor && updateActor(selectedActor.id, patch)} onDuplicate={duplicateSelectedActor} onDelete={deleteSelectedActor} />
+        </SceneStage>
+
+        <PythonPanel
+          generated={generated}
+          projectName={project.name}
+          highlightLines={highlightLines}
+          activeSection={activeCodeSection}
+          onSelectSection={(section) => setPendingHighlight({ type: 'section', section })}
+          runtimeActor={playing ? runtimeActors.find((actor) => actor.id === selectedActorId) ?? null : null}
+          runtimeScore={runtimeScore}
+          showScore={project.showScore}
+        />
+
+        <BehaviorBuilder
+          project={project}
+          pythonIdentifiers={generated.lineMap.actorIdentifiers}
+          selectedActorId={selectedActorId}
+          disabled={playing}
+          onSelectActor={selectActor}
+          onControlChange={changeControl}
+          onCollisionChange={changeCollision}
+          onShowScoreChange={changeScoreVisibility}
+          onHighlightControl={(actorId, slot, part) => setPendingHighlight({ type: 'control', actorId, slot, part })}
+          onHighlightCollision={(part) => setPendingHighlight({ type: 'collision', part })}
+        />
+      </main>
+
+      {showAddDialog ? <AddActorDialog onClose={() => setShowAddDialog(false)} onAdd={addActor} /> : null}
+      <div className="sr-only" aria-live="polite">{playing ? 'Preview is running. Use the enabled keyboard controls to move your actor.' : 'Design mode.'}</div>
+    </div>
+  );
+}
